@@ -1,0 +1,697 @@
+<!DOCTYPE html>
+<html lang="uk">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Chia (XCH) Термінал</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <script src="https://unpkg.com/lightweight-charts@4.1.3/dist/lightweight-charts.standalone.production.js"></script>
+</head>
+<body>
+<div class="app" id="app">
+
+    <!-- ШАПКА -->
+    <header class="topbar">
+        <div class="pair">
+            <div class="logo">XCH</div>
+            <div>
+                <div class="pair-name">XCH/USDT <span class="tag">Chia Network</span></div>
+                <div class="pair-sub">Спот · OKX</div>
+            </div>
+        </div>
+        <div class="price-block">
+            <div class="price" id="price">—</div>
+            <div class="change" id="change">—</div>
+        </div>
+        <div class="stats">
+            <div class="stat"><span>24г максимум</span><b id="st-high">—</b></div>
+            <div class="stat"><span>24г мінімум</span><b id="st-low">—</b></div>
+            <div class="stat"><span>Обсяг 24г (XCH)</span><b id="st-vol">—</b></div>
+            <div class="stat"><span>Обсяг 24г (USDT)</span><b id="st-volusd">—</b></div>
+            <div class="stat"><span>Зміна за період</span><b id="st-range">—</b></div>
+        </div>
+        <div class="signal">
+            <span class="signal-label">Торговий сигнал</span>
+            <div class="signal-badge" id="signal-badge">—</div>
+        </div>
+    </header>
+
+    <main class="layout">
+        <!-- ГРАФІК -->
+        <section class="panel chart-panel" id="chart-panel">
+            <div class="toolbar">
+                <div class="group" id="g-range">
+                    {% for r, label in ranges %}
+                    <button class="btn" data-range="{{ r }}" title="{{ 'Від початку торгів на OKX' if r == 'ALL' else label }}">{{ label }}</button>
+                    {% endfor %}
+                </div>
+                <div class="sep"></div>
+                <div class="group" id="g-type">
+                    <button class="btn" data-type="candle" title="Японські свічки">Свічки</button>
+                    <button class="btn" data-type="line" title="Лінія">Лінія</button>
+                    <button class="btn" data-type="area" title="Область">Область</button>
+                </div>
+                <div class="sep"></div>
+                <div class="group" id="g-ind">
+                    <button class="btn tog" data-ind="ema"><i class="dot" style="background:#f59e0b"></i>EMA 9</button>
+                    <button class="btn tog" data-ind="sma"><i class="dot" style="background:#ec4899"></i>SMA 21</button>
+                    <button class="btn tog" data-ind="bb"><i class="dot" style="background:#60a5fa"></i>Bollinger</button>
+                    <button class="btn tog" data-ind="vol"><i class="dot" style="background:#64748b"></i>Обсяг</button>
+                    <button class="btn tog" data-ind="rsi"><i class="dot" style="background:#a78bfa"></i>RSI 14</button>
+                    <button class="btn tog" data-ind="mk" title="Стрілки купівлі/продажу на графіку">▲▼ Сигнали</button>
+                </div>
+                <div class="spacer"></div>
+                <div class="group">
+                    <button class="btn tog" id="b-cmp" title="Порівняти XCH з криптою та акціями (у %)">⚖ Порівняння</button>
+                    <button class="btn tog" id="b-log" title="Логарифмічна шкала">Лог</button>
+                    <button class="btn tog" id="b-live" title="Автооновлення кожні 15 с"><i class="live"></i>LIVE</button>
+                    <button class="btn" id="b-fit" title="Скинути масштаб">⤢</button>
+                    <button class="btn" id="b-refresh" title="Оновити зараз">⟳</button>
+                    <button class="btn" id="b-shot" title="Зберегти знімок">📷</button>
+                    <button class="btn" id="b-csv" title="Експорт CSV">CSV</button>
+                    <button class="btn" id="b-full" title="На весь екран">⛶</button>
+                </div>
+            </div>
+
+            <div class="chips" id="chips"></div>
+
+            <div class="chart-area">
+                <div class="legend" id="legend"></div>
+                <div id="chart"></div>
+                <div id="cmp-chart"></div>
+                <div id="rsi-wrap" class="rsi-wrap"><div class="rsi-title">RSI 14</div><div id="rsi"></div></div>
+                <div class="overlay" id="overlay">Завантаження…</div>
+            </div>
+
+            <div class="footer">
+                <span class="live-dot" id="live-dot"></span>
+                <span id="status-text">Очікування даних…</span>
+            </div>
+        </section>
+
+        <!-- ПРАВА КОЛОНКА -->
+        <aside class="side">
+            <section class="panel cmp-panel">
+                <div class="panel-title">Порівняння <span class="muted" id="cmp-tf"></span></div>
+                <div class="cmp-rank" id="cmp-rank"></div>
+                <div id="cmp-rows"></div>
+                <div class="cmp-note" id="cmp-note"></div>
+            </section>
+            <section class="panel book">
+                <div class="panel-title">Книга ордерів <span class="muted">XCH/USDT</span></div>
+                <div class="book-head"><span>Ціна (USDT)</span><span>Сума (XCH)</span><span>Разом</span></div>
+                <div id="asks"></div>
+                <div class="mid" id="mid">—</div>
+                <div id="bids"></div>
+                <div class="pressure"><div id="p-buy"></div><div id="p-sell"></div></div>
+                <div class="pressure-labels"><span id="pl-buy">—</span><span id="pl-sell">—</span></div>
+            </section>
+
+            <section class="panel sig-panel">
+                <div class="panel-title">Що робити зараз? <span class="muted" id="sig-tf"></span></div>
+                <div class="verdict">
+                    <div class="v-main" id="v-main">—</div>
+                    <div class="v-text" id="v-text"></div>
+                </div>
+                <div class="levels" id="levels"></div>
+                <div class="meter"><div class="meter-fill" id="meter-fill"></div><div class="meter-mid"></div></div>
+                <div class="meter-labels"><span>Продавати</span><span>Нейтрально</span><span>Купувати</span></div>
+                <ul class="reasons" id="reasons"></ul>
+                <div class="hist-title">Останні сигнали на графіку <span class="muted">(зміна ціни відтоді)</span></div>
+                <ul class="hist" id="hist"></ul>
+                <div class="disclaimer">Це технічний аналіз індикаторів, а не фінансова порада.</div>
+            </section>
+        </aside>
+    </main>
+</div>
+
+<script>
+(() => {
+    // ---------- Стан ----------
+    const DEFAULTS = {range: '1D', type: 'candle', ema: true, sma: true, bb: false, vol: true, rsi: false, mk: true, cmp: false, cmpSel: ['BTC', 'ETH', 'SPX', 'NDX'], log: false, live: true};
+    let state = {...DEFAULTS};
+    try { Object.assign(state, JSON.parse(localStorage.getItem('xch-state-v2') || '{}')); } catch (e) {}
+    const save = () => { try { localStorage.setItem('xch-state-v2', JSON.stringify(state)); } catch (e) {} };
+
+    const UP = '#a6e22e', DOWN = '#ff3d8b';
+    const TZ = -new Date().getTimezoneOffset() * 60;
+    const $ = s => document.querySelector(s);
+    const fmt = (n, d = 3) => n == null ? '—' : Number(n).toLocaleString('uk-UA', {minimumFractionDigits: d, maximumFractionDigits: d});
+    const fmtBig = n => n == null ? '—' : Number(n).toLocaleString('uk-UA', {maximumFractionDigits: 0});
+
+    let candles = [];
+    let lastClose = null;
+
+    // ---------- Графік ----------
+    const baseOpts = {
+        layout: {background: {color: '#0b0e14'}, textColor: '#8b95a7', fontSize: 11},
+        grid: {vertLines: {color: '#141a24'}, horzLines: {color: '#141a24'}},
+        rightPriceScale: {borderColor: '#1f2735'},
+        timeScale: {borderColor: '#1f2735', timeVisible: true, secondsVisible: false},
+        crosshair: {mode: 0},
+    };
+    const chartEl = $('#chart'), rsiEl = $('#rsi');
+    const chart = LightweightCharts.createChart(chartEl, {...baseOpts, width: chartEl.clientWidth, height: chartEl.clientHeight});
+    const rsiChart = LightweightCharts.createChart(rsiEl, {...baseOpts, width: rsiEl.clientWidth, height: rsiEl.clientHeight});
+
+    let priceSeries = null;
+    const mk = (opts) => chart.addLineSeries({lineWidth: 1.5, priceLineVisible: false, lastValueVisible: false, crosshairMarkerVisible: false, ...opts});
+    const emaS = mk({color: '#f59e0b'});
+    const smaS = mk({color: '#ec4899'});
+    const bbU = mk({color: '#60a5fa', lineWidth: 1});
+    const bbM = mk({color: '#60a5fa55', lineWidth: 1, lineStyle: 2});
+    const bbL = mk({color: '#60a5fa', lineWidth: 1});
+    const volS = chart.addHistogramSeries({priceFormat: {type: 'volume'}, priceScaleId: 'vol', priceLineVisible: false, lastValueVisible: false});
+    chart.priceScale('vol').applyOptions({scaleMargins: {top: 0.82, bottom: 0}});
+    const rsiS = rsiChart.addLineSeries({color: '#a78bfa', lineWidth: 1.5, priceLineVisible: false});
+    rsiS.createPriceLine({price: 70, color: '#ff3d8b88', lineStyle: 2, lineWidth: 1, axisLabelVisible: true});
+    rsiS.createPriceLine({price: 30, color: '#a6e22e88', lineStyle: 2, lineWidth: 1, axisLabelVisible: true});
+    rsiChart.priceScale('right').applyOptions({scaleMargins: {top: 0.1, bottom: 0.1}});
+
+    function makePriceSeries() {
+        if (priceSeries) chart.removeSeries(priceSeries);
+        if (state.type === 'candle') {
+            priceSeries = chart.addCandlestickSeries({
+                upColor: UP, downColor: DOWN, borderUpColor: UP, borderDownColor: DOWN, wickUpColor: UP, wickDownColor: DOWN,
+            });
+        } else if (state.type === 'line') {
+            priceSeries = chart.addLineSeries({color: '#38bdf8', lineWidth: 2});
+        } else {
+            priceSeries = chart.addAreaSeries({lineColor: '#38bdf8', topColor: 'rgba(56,189,248,.35)', bottomColor: 'rgba(56,189,248,0)', lineWidth: 2});
+        }
+        applyPrecision();
+        fillPrice();
+        applyMarkers();
+    }
+
+    function applyPrecision() {
+        const p = lastClose || 1;
+        const precision = p >= 100 ? 2 : p >= 1 ? 3 : 5;
+        const pf = {type: 'price', precision, minMove: 1 / Math.pow(10, precision)};
+        [priceSeries, emaS, smaS, bbU, bbM, bbL].forEach(s => s && s.applyOptions({priceFormat: pf}));
+    }
+
+    function fillPrice() {
+        if (!priceSeries || !candles.length) return;
+        const data = candles.map(c => state.type === 'candle'
+            ? {time: c.time + TZ, open: c.open, high: c.high, low: c.low, close: c.close}
+            : {time: c.time + TZ, value: c.close});
+        priceSeries.setData(data);
+    }
+
+    // ---------- Індикатори ----------
+    function ema(v, n) {
+        const k = 2 / (n + 1), out = [];
+        v.forEach((x, i) => out.push(i === 0 ? x : x * k + out[i - 1] * (1 - k)));
+        return out;
+    }
+    function sma(v, n) {
+        const out = []; let sum = 0;
+        v.forEach((x, i) => { sum += x; if (i >= n) sum -= v[i - n]; out.push(i >= n - 1 ? sum / n : null); });
+        return out;
+    }
+    function bollinger(v, n = 20, m = 2) {
+        const mid = sma(v, n);
+        const up = [], low = [];
+        v.forEach((_, i) => {
+            if (mid[i] == null) { up.push(null); low.push(null); return; }
+            const sl = v.slice(i - n + 1, i + 1);
+            const sd = Math.sqrt(sl.reduce((a, x) => a + (x - mid[i]) ** 2, 0) / n);
+            up.push(mid[i] + m * sd); low.push(mid[i] - m * sd);
+        });
+        return {mid, up, low};
+    }
+    function rsi(v, n = 14) {
+        const out = new Array(v.length).fill(null);
+        if (v.length <= n) return out;
+        let g = 0, l = 0;
+        for (let i = 1; i <= n; i++) { const d = v[i] - v[i - 1]; d >= 0 ? g += d : l -= d; }
+        g /= n; l /= n;
+        out[n] = l === 0 ? 100 : 100 - 100 / (1 + g / l);
+        for (let i = n + 1; i < v.length; i++) {
+            const d = v[i] - v[i - 1];
+            g = (g * (n - 1) + Math.max(d, 0)) / n;
+            l = (l * (n - 1) + Math.max(-d, 0)) / n;
+            out[i] = l === 0 ? 100 : 100 - 100 / (1 + g / l);
+        }
+        return out;
+    }
+    const series = (arr, vals) => arr.map((c, i) => vals[i] == null ? null : {time: c.time + TZ, value: vals[i]}).filter(Boolean);
+
+    let ind = {};
+    function computeIndicators() {
+        const closes = candles.map(c => c.close);
+        ind = {ema: ema(closes, 9), sma: sma(closes, 21), bb: bollinger(closes), rsi: rsi(closes)};
+        emaS.setData(series(candles, ind.ema));
+        smaS.setData(series(candles, ind.sma));
+        bbU.setData(series(candles, ind.bb.up));
+        bbM.setData(series(candles, ind.bb.mid));
+        bbL.setData(series(candles, ind.bb.low));
+        volS.setData(candles.map(c => ({time: c.time + TZ, value: c.volume, color: c.close >= c.open ? UP + '66' : DOWN + '66'})));
+        rsiS.setData(series(candles, ind.rsi));
+    }
+
+    function applyVisibility() {
+        emaS.applyOptions({visible: state.ema});
+        smaS.applyOptions({visible: state.sma});
+        [bbU, bbM, bbL].forEach(s => s.applyOptions({visible: state.bb}));
+        volS.applyOptions({visible: state.vol});
+        chart.priceScale('right').applyOptions({
+            mode: state.log ? 1 : 0,
+            scaleMargins: {top: 0.08, bottom: state.vol ? 0.22 : 0.06},
+        });
+        $('#rsi-wrap').style.display = (state.rsi && !state.cmp) ? 'block' : 'none';
+        applyMarkers();
+        resize();
+    }
+
+    // ---------- Сигнали на графіку (перетин EMA-9 і SMA-21) ----------
+    let signals = [];
+    function findSignals() {
+        const out = [];
+        for (let i = 22; i < candles.length; i++) {
+            if (ind.sma[i - 1] == null) continue;
+            const d0 = ind.ema[i - 1] - ind.sma[i - 1], d1 = ind.ema[i] - ind.sma[i];
+            let type = null;
+            if (d0 <= 0 && d1 > 0) type = 'buy';
+            else if (d0 >= 0 && d1 < 0) type = 'sell';
+            if (type && (!out.length || i - out[out.length - 1].i >= 3)) out.push({i, type});
+        }
+        return out;
+    }
+    function applyMarkers() {
+        if (!priceSeries) return;
+        if (!state.mk) { priceSeries.setMarkers([]); return; }
+        priceSeries.setMarkers(signals.map(s => ({
+            time: candles[s.i].time + TZ,
+            position: s.type === 'buy' ? 'belowBar' : 'aboveBar',
+            color: s.type === 'buy' ? UP : DOWN,
+            shape: s.type === 'buy' ? 'arrowUp' : 'arrowDown',
+            text: s.type === 'buy' ? 'КУПИТИ' : 'ПРОДАТИ',
+        })));
+    }
+    function atr(n = 14) {
+        const k = Math.min(n, candles.length - 1);
+        let sum = 0;
+        for (let i = candles.length - k; i < candles.length; i++) {
+            const c = candles[i], p = candles[i - 1].close;
+            sum += Math.max(c.high - c.low, Math.abs(c.high - p), Math.abs(c.low - p));
+        }
+        return sum / k;
+    }
+    const VERDICT = {
+        'АКТИВНО КУПУВАТИ': 'Майже всі індикатори вказують на зростання. Можна розглядати купівлю.',
+        'КУПУВАТИ': 'Сигналів за зростання більше, ніж за падіння. Купівля можлива, але обережно.',
+        'НЕЙТРАЛЬНО': 'Індикатори суперечать один одному. Краще зачекати на чіткий сигнал.',
+        'ПРОДАВАТИ': 'Сигналів за падіння більше. Купувати зараз ризиковано, а якщо монети вже є, можна розглядати продаж.',
+        'АКТИВНО ПРОДАВАТИ': 'Майже всі індикатори вказують на падіння. Купувати зараз не варто.',
+    };
+    function renderVerdict(label, color, total, items, price) {
+        const conf = Math.round(Math.abs(total) / items.length * 100);
+        $('#v-main').innerHTML = `<span style="color:${color}">${label}</span><small>впевненість ${conf}%</small>`;
+        $('#v-text').textContent = VERDICT[label] || '';
+        const a = atr(), sl = candles.slice(-30);
+        const sup = Math.min(...sl.map(c => c.low)), res = Math.max(...sl.map(c => c.high));
+        $('#levels').innerHTML = [
+            ['Підтримка', sup, ''], ['Опір', res, ''],
+            ['Стоп (якщо купувати)', price - 1.5 * a, 'down'], ['Ціль (якщо купувати)', price + 3 * a, 'up'],
+        ].map(([n, v, c]) => `<div><span>${n}</span><b class="${c}">${fmt(v)}</b></div>`).join('');
+
+        const last = signals.slice(-5).reverse();
+        $('#hist').innerHTML = last.length ? last.map(s => {
+            const c = candles[s.i], mv = (price - c.close) / c.close * 100;
+            const d = new Date(c.time * 1000).toLocaleString('uk-UA', {day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit'});
+            return `<li class="${s.type === 'buy' ? 'pos' : 'neg'}"><i>${s.type === 'buy' ? '▲' : '▼'}</i>` +
+                `<span>${s.type === 'buy' ? 'Купити' : 'Продати'} · ${d}</span><b>${fmt(c.close)}</b>` +
+                `<em class="${mv >= 0 ? 'up' : 'down'}">${mv >= 0 ? '+' : ''}${mv.toFixed(2)}%</em></li>`;
+        }).join('') : '<li class="neu"><i>●</i><span>На цьому періоді перетинів не було</span></li>';
+    }
+
+    // ---------- Сигнал ----------
+    function analyze() {
+        const n = candles.length;
+        if (n < 25) {
+            $('#signal-badge').textContent = 'Недостатньо даних';
+            $('#signal-badge').style.background = '#94a3b8';
+            return;
+        }
+        const i = n - 1, price = candles[i].close;
+        const e = ind.ema[i], s = ind.sma[i], r = ind.rsi[i];
+        const up = ind.bb.up[i], lo = ind.bb.low[i];
+        const back = candles[Math.max(0, i - 10)].close;
+        const items = [];
+        const add = (score, text) => items.push({score, text});
+
+        add(price > e ? 1 : -1, price > e ? 'Ціна вище EMA-9' : 'Ціна нижче EMA-9');
+        add(e > s ? 1 : -1, e > s ? 'EMA-9 вище SMA-21 (бичачий перетин)' : 'EMA-9 нижче SMA-21 (ведмежий перетин)');
+        add(price > s ? 1 : -1, price > s ? 'Ціна вище SMA-21' : 'Ціна нижче SMA-21');
+        if (r != null) {
+            if (r >= 70) add(-1, `RSI ${r.toFixed(0)} — перекупленість`);
+            else if (r <= 30) add(1, `RSI ${r.toFixed(0)} — перепроданість`);
+            else add(0, `RSI ${r.toFixed(0)} — нейтральна зона`);
+        }
+        if (up != null) {
+            if (price > up) add(-1, 'Ціна вище верхньої смуги Bollinger');
+            else if (price < lo) add(1, 'Ціна нижче нижньої смуги Bollinger');
+            else add(0, 'Ціна всередині смуг Bollinger');
+        }
+        const mom = (price - back) / back * 100;
+        add(mom > 0 ? 1 : -1, `Імпульс за 10 свічок: ${mom >= 0 ? '+' : ''}${mom.toFixed(2)}%`);
+
+        const total = items.reduce((a, x) => a + x.score, 0);
+        let label, color;
+        if (total >= 3) [label, color] = ['АКТИВНО КУПУВАТИ', '#22c55e'];
+        else if (total >= 1) [label, color] = ['КУПУВАТИ', '#4ade80'];
+        else if (total <= -3) [label, color] = ['АКТИВНО ПРОДАВАТИ', '#ef4444'];
+        else if (total <= -1) [label, color] = ['ПРОДАВАТИ', '#f87171'];
+        else [label, color] = ['НЕЙТРАЛЬНО', '#fbbf24'];
+
+        const badge = $('#signal-badge');
+        badge.textContent = label; badge.style.background = color;
+
+        const pct = (total + items.length) / (items.length * 2) * 100;
+        const fill = $('#meter-fill');
+        fill.style.width = pct + '%'; fill.style.background = color;
+
+        $('#sig-tf').textContent = 'період ' + state.range;
+        renderVerdict(label, color, total, items, price);
+        $('#reasons').innerHTML = items.map(x =>
+            `<li class="${x.score > 0 ? 'pos' : x.score < 0 ? 'neg' : 'neu'}"><i>${x.score > 0 ? '▲' : x.score < 0 ? '▼' : '●'}</i>${x.text}</li>`).join('');
+    }
+
+    // ---------- Легенда ----------
+    function setLegend(c, i) {
+        if (!c) return;
+        const col = c.close >= c.open ? UP : DOWN;
+        const d = new Date(c.time * 1000).toLocaleString('uk-UA', {day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit'});
+        const chg = (c.close - c.open) / c.open * 100;
+        $('#legend').innerHTML =
+            `<span class="lg-date">${d}</span>` +
+            `<span>В <b style="color:${col}">${fmt(c.open)}</b></span><span>Макс <b style="color:${col}">${fmt(c.high)}</b></span>` +
+            `<span>Мін <b style="color:${col}">${fmt(c.low)}</b></span><span>З <b style="color:${col}">${fmt(c.close)}</b></span>` +
+            `<span style="color:${col}">${chg >= 0 ? '+' : ''}${chg.toFixed(2)}%</span>` +
+            `<span>Обс <b>${fmtBig(c.volume)}</b></span>` +
+            (state.ema && ind.ema ? `<span style="color:#f59e0b">EMA9 ${fmt(ind.ema[i])}</span>` : '') +
+            (state.sma && ind.sma && ind.sma[i] != null ? `<span style="color:#ec4899">SMA21 ${fmt(ind.sma[i])}</span>` : '');
+    }
+    chart.subscribeCrosshairMove(p => {
+        if (!p.time) { const i = candles.length - 1; setLegend(candles[i], i); return; }
+        const t = p.time - TZ;
+        const i = candles.findIndex(c => c.time === t);
+        if (i >= 0) setLegend(candles[i], i);
+    });
+
+    // Синхронізація часової шкали
+    let syncing = false;
+    const sync = (from, to) => from.timeScale().subscribeVisibleLogicalRangeChange(r => {
+        if (syncing || !r) return;
+        syncing = true; to.timeScale().setVisibleLogicalRange(r); syncing = false;
+    });
+    sync(chart, rsiChart); sync(rsiChart, chart);
+
+    // ---------- Дані ----------
+    function setStatus(text, ok = true) {
+        $('#status-text').textContent = text;
+        $('#live-dot').className = 'live-dot' + (ok ? '' : ' err');
+    }
+
+    async function loadCandles(keepView = false) {
+        const overlay = $('#overlay');
+        if (!keepView) { overlay.style.display = 'flex'; overlay.textContent = 'Завантаження…'; }
+        try {
+            const res = await fetch('/api/candles?range=' + state.range);
+            const data = await res.json();
+            if (data.status !== 'ok') throw new Error(data.message || 'помилка');
+            const prevRange = chart.timeScale().getVisibleLogicalRange();
+            candles = data.candles;
+            lastClose = candles.at(-1).close;
+            applyPrecision();
+            fillPrice();
+            computeIndicators();
+            signals = findSignals();
+            applyMarkers();
+            if (keepView && prevRange) chart.timeScale().setVisibleLogicalRange(prevRange);
+            else chart.timeScale().fitContent();
+            setLegend(candles.at(-1), candles.length - 1);
+            analyze();
+
+            const first = candles[0].close, chg = (lastClose - first) / first * 100;
+            const hi = Math.max(...candles.map(c => c.high)), lo = Math.min(...candles.map(c => c.low));
+            const el = $('#st-range');
+            el.textContent = `${chg >= 0 ? '+' : ''}${chg.toFixed(2)}%  (${fmt(lo)} – ${fmt(hi)})`;
+            el.className = chg >= 0 ? 'up' : 'down';
+            overlay.style.display = 'none';
+            setStatus('Оновлено о ' + new Date().toLocaleTimeString('uk-UA'));
+            if (state.cmp) loadCompare(!keepView);
+        } catch (err) {
+            console.error(err);
+            overlay.style.display = 'flex'; overlay.textContent = 'Не вдалося отримати дані: ' + err.message;
+            setStatus('Помилка отримання даних', false);
+        }
+    }
+
+    async function loadMarket() {
+        try {
+            const res = await fetch('/api/market');
+            const m = await res.json();
+            if (m.status !== 'ok') throw new Error(m.message);
+            $('#price').textContent = fmt(m.last);
+            $('#price').className = 'price ' + (m.change24h >= 0 ? 'up' : 'down');
+            const c = $('#change');
+            c.textContent = `${m.change24h >= 0 ? '+' : ''}${m.change24h.toFixed(2)}% (24г)`;
+            c.className = 'change ' + (m.change24h >= 0 ? 'up' : 'down');
+            $('#st-high').textContent = fmt(m.high24h);
+            $('#st-low').textContent = fmt(m.low24h);
+            $('#st-vol').textContent = fmtBig(m.vol24h);
+            $('#st-volusd').textContent = fmtBig(m.volUsd24h);
+            document.title = `${fmt(m.last)} · XCH/USDT`;
+            renderBook(m);
+        } catch (err) { console.error(err); }
+    }
+
+    function renderBook(m) {
+        const asks = m.asks.slice(0, 12).reverse();     // найвища ціна зверху
+        const bids = m.bids.slice(0, 12);
+        const maxSz = Math.max(...asks.map(a => a[1]), ...bids.map(b => b[1]), 1);
+        const row = (p, s, cls) =>
+            `<div class="row ${cls}" style="--w:${(s / maxSz * 100).toFixed(0)}%"><span class="p">${fmt(p)}</span><span>${fmt(s, 1)}</span><span>${fmt(p * s, 1)}</span></div>`;
+        $('#asks').innerHTML = asks.map(a => row(a[0], a[1], 'ask')).join('');
+        $('#bids').innerHTML = bids.map(b => row(b[0], b[1], 'bid')).join('');
+        const spread = m.ask && m.bid ? m.ask - m.bid : null;
+        $('#mid').innerHTML = `<b class="${m.change24h >= 0 ? 'up' : 'down'}">${fmt(m.last)}</b><small>Спред ${spread != null ? fmt(spread) : '—'}</small>`;
+        const buy = bids.reduce((a, b) => a + b[1], 0), sell = asks.reduce((a, b) => a + b[1], 0);
+        const tot = buy + sell || 1;
+        $('#p-buy').style.width = (buy / tot * 100) + '%';
+        $('#p-sell').style.width = (sell / tot * 100) + '%';
+        $('#pl-buy').textContent = `Купівля ${(buy / tot * 100).toFixed(0)}%`;
+        $('#pl-sell').textContent = `Продаж ${(sell / tot * 100).toFixed(0)}%`;
+    }
+
+    // ---------- Порівняння з іншими активами ----------
+    const ASSETS = {
+        XCH: {name: 'XCH (Chia)', color: '#a6e22e'},
+        BTC: {name: 'Bitcoin', color: '#f7931a'},
+        ETH: {name: 'Ethereum', color: '#7c8cf8'},
+        BNB: {name: 'BNB', color: '#eab308'},
+        SOL: {name: 'Solana', color: '#9945ff'},
+        XRP: {name: 'XRP', color: '#00aae4'},
+        DOGE: {name: 'Dogecoin', color: '#c2a633'},
+        SPX: {name: 'S&P 500', color: '#e5e7eb'},
+        NDX: {name: 'NASDAQ', color: '#38bdf8'},
+        AAPL: {name: 'Apple', color: '#a3a3a3'},
+        MSFT: {name: 'Microsoft', color: '#2dd4bf'},
+        NVDA: {name: 'NVIDIA', color: '#10b981'},
+        TSLA: {name: 'Tesla', color: '#ef4444'},
+        AMZN: {name: 'Amazon', color: '#f472b6'},
+        GOOGL: {name: 'Google', color: '#4285f4'},
+    };
+    const GROUPS = [
+        ['Крипто', ['BTC', 'ETH', 'BNB', 'SOL', 'XRP', 'DOGE']],
+        ['Акції та індекси', ['SPX', 'NDX', 'AAPL', 'MSFT', 'NVDA', 'TSLA', 'AMZN', 'GOOGL']],
+    ];
+    state.cmpSel = (state.cmpSel || []).filter(k => ASSETS[k] && k !== 'XCH');
+
+    const cmpEl = $('#cmp-chart');
+    const cmpChart = LightweightCharts.createChart(cmpEl, {
+        ...baseOpts, width: 600, height: 400,
+        localization: {priceFormatter: v => (v >= 0 ? '+' : '') + v.toFixed(1) + '%'},
+    });
+    const cmpSeries = {};
+    let cmpData = {}, cmpAll = {};
+
+    function normalize(pts, since) {
+        const m = new Map();
+        pts.forEach(p => { if (p.time >= since) m.set(p.time, p); });
+        const use = [...m.values()].sort((a, b) => a.time - b.time);
+        if (!use.length) return [];
+        const base = use[0].close;
+        return use.map(p => ({time: p.time + TZ, value: (p.close / base - 1) * 100}));
+    }
+    const sgn = v => (v >= 0 ? '+' : '') + v.toFixed(2) + '%';
+
+    function renderCompare(fit) {
+        if (!candles.length) return;
+        const since = candles[0].time;
+        const all = {XCH: normalize(candles.map(c => ({time: c.time, close: c.close})), since)};
+        state.cmpSel.forEach(k => {
+            if (!cmpData[k]) return;
+            const n = normalize(cmpData[k], since);
+            if (n.length > 1) all[k] = n;
+        });
+        cmpAll = all;
+        Object.keys(cmpSeries).forEach(k => {
+            if (!all[k]) { cmpChart.removeSeries(cmpSeries[k]); delete cmpSeries[k]; }
+        });
+        Object.keys(all).forEach(k => {
+            if (!cmpSeries[k]) {
+                cmpSeries[k] = cmpChart.addLineSeries({
+                    color: ASSETS[k].color, lineWidth: k === 'XCH' ? 3 : 1.5,
+                    priceLineVisible: false, lastValueVisible: true,
+                    priceFormat: {type: 'custom', formatter: sgn, minMove: 0.01},
+                });
+                if (k === 'XCH') cmpSeries[k].createPriceLine({price: 0, color: '#3a4558', lineStyle: 2, lineWidth: 1, axisLabelVisible: false});
+            }
+            cmpSeries[k].setData(all[k]);
+        });
+        if (fit) cmpChart.timeScale().fitContent();
+        renderCmpPanel();
+        renderCmpLegend(null);
+    }
+
+    function renderCmpPanel() {
+        $('#cmp-tf').textContent = 'період ' + state.range + ' · зміна, %';
+        const rows = Object.keys(cmpAll).map(k => ({k, v: cmpAll[k][cmpAll[k].length - 1].value}))
+            .sort((a, b) => b.v - a.v);
+        const max = Math.max(...rows.map(r => Math.abs(r.v)), 1);
+        $('#cmp-rows').innerHTML = rows.map(r =>
+            `<div class="cmp-row${r.k === 'XCH' ? ' me' : ''}"><span class="nm"><i style="background:${ASSETS[r.k].color}"></i>${ASSETS[r.k].name}</span>` +
+            `<span class="bar"><u class="${r.v >= 0 ? 'p' : 'n'}" style="width:${(Math.abs(r.v) / max * 100).toFixed(0)}%"></u></span>` +
+            `<b class="${r.v >= 0 ? 'up' : 'down'}">${sgn(r.v)}</b></div>`).join('');
+        const place = rows.findIndex(r => r.k === 'XCH') + 1;
+        $('#cmp-rank').textContent = rows.length > 1
+            ? `XCH на ${place}-му місці з ${rows.length} за цей період`
+            : 'Обери активи для порівняння над графіком';
+        const missing = state.cmpSel.filter(k => !cmpAll[k]);
+        $('#cmp-note').textContent = missing.length
+            ? `Немає даних: ${missing.map(k => ASSETS[k].name).join(', ')} (біржа закрита, актив не торгувався у цей період або джерело недоступне).`
+            : 'Усі лінії стартують з 0% на початку вибраного періоду.';
+    }
+
+    function renderCmpLegend(param) {
+        const parts = Object.keys(cmpAll).map(k => {
+            let v;
+            if (param && param.time) { const d = param.seriesData.get(cmpSeries[k]); v = d ? d.value : null; }
+            else v = cmpAll[k][cmpAll[k].length - 1].value;
+            return v == null ? '' :
+                `<span><i class="dot" style="background:${ASSETS[k].color}"></i>${k} <b class="${v >= 0 ? 'up' : 'down'}">${sgn(v)}</b></span>`;
+        });
+        $('#legend').innerHTML = parts.join('');
+    }
+    cmpChart.subscribeCrosshairMove(p => { if (state.cmp) renderCmpLegend(p); });
+
+    async function loadCompare(fit = true) {
+        if (!state.cmp || !candles.length) return;
+        const overlay = $('#overlay');
+        if (fit) { overlay.style.display = 'flex'; overlay.textContent = 'Завантаження порівняння…'; }
+        try {
+            if (state.cmpSel.length) {
+                const res = await fetch(`/api/compare?range=${state.range}&symbols=${encodeURIComponent(state.cmpSel.join(','))}`);
+                const d = await res.json();
+                if (d.status !== 'ok') throw new Error(d.message || 'помилка');
+                cmpData = d.series || {};
+            } else cmpData = {};
+        } catch (err) { console.error(err); cmpData = {}; }
+        overlay.style.display = 'none';
+        renderCompare(fit);
+    }
+
+    function renderChips() {
+        $('#chips').innerHTML = GROUPS.map(([title, keys]) =>
+            `<span class="chip-title">${title}:</span>` +
+            keys.map(k => `<button class="chip${state.cmpSel.includes(k) ? ' active' : ''}" data-k="${k}"><i style="background:${ASSETS[k].color}"></i>${ASSETS[k].name}</button>`).join('')
+        ).join('<span class="sep"></span>');
+        document.querySelectorAll('.chip').forEach(b => b.onclick = () => {
+            const k = b.dataset.k, i = state.cmpSel.indexOf(k);
+            if (i >= 0) state.cmpSel.splice(i, 1); else state.cmpSel.push(k);
+            save(); renderChips(); loadCompare(true);
+        });
+    }
+
+    function applyMode() {
+        $('#app').classList.toggle('cmp-mode', state.cmp);
+        chartEl.style.display = state.cmp ? 'none' : 'block';
+        cmpEl.style.display = state.cmp ? 'block' : 'none';
+        $('#b-cmp').classList.toggle('active', state.cmp);
+        applyVisibility();
+        if (state.cmp) { renderChips(); loadCompare(true); }
+        else if (candles.length) setLegend(candles[candles.length - 1], candles.length - 1);
+    }
+    $('#b-cmp').onclick = () => { state.cmp = !state.cmp; save(); applyMode(); };
+
+    // ---------- Кнопки ----------
+    function syncButtons() {
+        document.querySelectorAll('[data-range]').forEach(b => b.classList.toggle('active', b.dataset.range === state.range));
+        document.querySelectorAll('[data-type]').forEach(b => b.classList.toggle('active', b.dataset.type === state.type));
+        document.querySelectorAll('[data-ind]').forEach(b => b.classList.toggle('active', !!state[b.dataset.ind]));
+        $('#b-log').classList.toggle('active', state.log);
+        $('#b-live').classList.toggle('active', state.live);
+    }
+
+    document.querySelectorAll('[data-range]').forEach(b => b.onclick = () => { state.range = b.dataset.range; save(); syncButtons(); loadCandles(); });
+    document.querySelectorAll('[data-type]').forEach(b => b.onclick = () => { state.type = b.dataset.type; save(); syncButtons(); makePriceSeries(); });
+    document.querySelectorAll('[data-ind]').forEach(b => b.onclick = () => { const k = b.dataset.ind; state[k] = !state[k]; save(); syncButtons(); applyVisibility(); });
+    $('#b-log').onclick = () => { state.log = !state.log; save(); syncButtons(); applyVisibility(); };
+    $('#b-live').onclick = () => { state.live = !state.live; save(); syncButtons(); setupTimer(); };
+    $('#b-fit').onclick = () => (state.cmp ? cmpChart : chart).timeScale().fitContent();
+    $('#b-refresh').onclick = () => { loadCandles(true); loadMarket(); };
+    $('#b-full').onclick = () => {
+        if (document.fullscreenElement) document.exitFullscreen();
+        else $('#app').requestFullscreen && $('#app').requestFullscreen();
+    };
+    $('#b-shot').onclick = () => {
+        const canvas = (state.cmp ? cmpChart : chart).takeScreenshot();
+        canvas.toBlob(blob => {
+            const a = document.createElement('a');
+            a.href = URL.createObjectURL(blob);
+            a.download = `XCH-USDT-${state.range}.png`;
+            a.click();
+            URL.revokeObjectURL(a.href);
+        });
+    };
+    $('#b-csv').onclick = () => {
+        const lines = ['time,open,high,low,close,volume'].concat(
+            candles.map(c => `${new Date(c.time * 1000).toISOString()},${c.open},${c.high},${c.low},${c.close},${c.volume}`));
+        const a = document.createElement('a');
+        a.href = URL.createObjectURL(new Blob([lines.join('\n')], {type: 'text/csv'}));
+        a.download = `XCH-USDT-${state.range}.csv`;
+        a.click();
+        URL.revokeObjectURL(a.href);
+    };
+
+    // ---------- Розміри ----------
+    function resize() {
+        if (chartEl.clientWidth) chart.applyOptions({width: chartEl.clientWidth, height: chartEl.clientHeight});
+        if (cmpEl.clientWidth) cmpChart.applyOptions({width: cmpEl.clientWidth, height: cmpEl.clientHeight});
+        if (state.rsi && !state.cmp && rsiEl.clientWidth) rsiChart.applyOptions({width: rsiEl.clientWidth, height: rsiEl.clientHeight});
+    }
+    new ResizeObserver(resize).observe($('.chart-area'));
+    window.addEventListener('resize', resize);
+
+    // ---------- Таймер ----------
+    let timer = null;
+    function setupTimer() {
+        clearInterval(timer);
+        if (state.live) timer = setInterval(() => { loadCandles(true); loadMarket(); }, 15000);
+    }
+
+    // ---------- Старт ----------
+    syncButtons();
+    makePriceSeries();
+    applyMode();
+    loadCandles();
+    loadMarket();
+    setupTimer();
+})();
+</script>
+</body>
+</html>

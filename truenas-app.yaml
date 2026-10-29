@@ -1,0 +1,15 @@
+# Вставити в TrueNAS: Apps -> Discover Apps -> Custom App (або "Install via YAML").
+# ЗМІНИ шлях зліва від двокрапки на свій датасет із проєктом.
+services:
+  chia-analysis:
+    image: python:3.12-slim
+    container_name: chia-analysis
+    working_dir: /app
+    restart: unless-stopped
+    volumes:
+      - /mnt/POOL/apps/chia_analysis:/app
+    ports:
+      - "9050:5000"
+    command: >
+      sh -c "pip install --no-cache-dir -r requirements.txt &&
+             gunicorn -b 0.0.0.0:5000 -w 2 --threads 4 app:app"
